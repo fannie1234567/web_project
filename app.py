@@ -12,6 +12,12 @@ def hello_world():
     name = os.environ.get("NAME", "World")
     return f"Hello {name} 3!"
 
+@app.route("/fannie")
+def hello_world_fannie():
+    """Example Hello World route."""
+    name = os.environ.get("NAME", "World")
+    return f"Hello {name} fannie!"
+
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
