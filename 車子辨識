@@ -1,0 +1,230 @@
+import cv2
+import requests
+import os
+import json
+import numpy as np
+import matplotlib.pyplot as plt
+import time
+import pandas as pd
+from flask import Flask, jsonify, request
+
+app = Flask(__name__)
+
+start = time.time()
+
+
+# @app.route('/test', methods=['GET'])
+def polygontest(vertices, point):
+    # 檢測點是否在多邊形內部
+    poly = np.array(vertices, np.int32)
+    return cv2.pointPolygonTest(poly, point, False) >= 0
+
+
+# 假資料
+image_path = 'D:\polygon\cars\image3.jpg'
+image = cv2.imread(image_path)
+
+# def download_image(save_directory, image_filename):
+#     # 確保目錄存在，如果不存在則創建它
+#     os.makedirs(save_directory, exist_ok=True)
+
+#     image_url = "http://192.168.50.180/lpr/picture/file/{}".format(image_filename)
+#     response = requests.get(image_url)
+
+#     if response.status_code == 200:
+#         # 獲取圖片二進位數據
+#         image_data = response.content
+
+#         # 獲取已保存的圖片數量
+#         saved_images_count = len(os.listdir(save_directory))
+
+#         # 構造新的圖片檔名
+#         new_image_filename = "image{}.jpg".format(saved_images_count + 1)
+
+#         # 構造圖片的完整路徑
+#         save_path = os.path.join(save_directory, new_image_filename)
+
+#         # 將圖片保存到指定路徑
+#         with open(save_path, "wb") as file:
+#             file.write(image_data)
+#         return save_path, response.status_code
+#     else:
+#         return None, response.status_code
+
+
+# save_directory = r"D:\polygon\cars"
+# image_filename = input("請輸入圖片檔名：")  # 讓使用者輸入圖片檔名
+
+# result, status_code = download_image(save_directory, image_filename)
+
+# if result is not None:
+#     print("圖片下載完成，保存為:", result)
+# else:
+#     print("無法下載圖片。回應狀態碼:", status_code)
+
+# image_path = os.path.join(save_directory, result)
+# image = cv2.imread(image_path)
+
+# 讀取 Labelme 的 JSON 標記檔案
+
+json_file_path = r"D:\polygon\test\new.json"
+with open(json_file_path, 'r', encoding='utf-8') as f:
+    data = json.load(f)
+
+# 取得多邊形的頂點座標
+polygons = [polygon['points'] for polygon in data['shapes']]
+
+# 繪製多邊形
+for vertices in polygons:
+    points = np.array(vertices, np.int32)
+    cv2.polylines(image, [points], isClosed=True, color=(0, 255, 0), thickness=2)
+
+# plt.figure(figsize=(8, 6))
+# plt.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+# plt.axis('off')
+# plt.show()
+
+# # 取得車輛辨識結果的 JSON 資料
+# car_url = "http://192.168.50.180/lpr/car/3"  # 請替換成正確的 URL
+# car_response = requests.get(car_url)
+
+# car_data_path = os.path.join(r"D:\polygon\car.json", "car_data.json")
+
+# if car_response.status_code == 200:
+#     car_data = car_response.json()
+
+#     # 將車輛辨識結果的 JSON 資料保存到本地端
+#     with open(car_data_path, 'w') as f:
+#         json.dump(car_data, f)
+# else:
+#     print("錯誤訊息:", car_response.status_code)
+
+# # 讀取 JSON 標記文件
+# with open(car_data_path, 'r') as f:
+#     data = json.load(f)
+
+# #假資料
+with open(r'D:\polygon\car.json\car_data.json', 'r') as f:
+    data = json.load(f)
+
+# 取得圖片和車輛資訊
+image_path = r"D:\polygon\cars\image3.jpg"
+image = cv2.imread(image_path)
+
+# print(type(image))
+car_data = data['contents'][0]
+car_boxes = car_data['car_boxes']
+image_width = car_data['width']
+image_height = car_data['height']
+
+# 繪製車輛標註框和停車格多邊形
+for polygon in polygons:
+    vertices = polygon
+    points = np.array(vertices, np.int32)
+    cv2.polylines(image, [points], isClosed=True, color=(0, 255, 0), thickness=2)
+
+for car_box in car_boxes:
+    box = car_box['box']
+    x_min = int(box['x_min'])
+    y_min = int(box['y_min'])
+    x_max = int(box['x_max'])
+    y_max = int(box['y_max'])
+
+    # 繪製車輛標註框
+    print(f"Draw rectangle", (x_min, y_min), (x_max, y_max))
+    cv2.rectangle(image, (x_min, y_min), (x_max, y_max), (0, 0, 255), 2)
+
+    # 計算車輛標註框中心點座標
+    center_x = int((x_min + x_max) / 2)
+    center_y = int((y_min + y_max) / 2)
+
+    # 判斷中心點是否在停車格內
+    if polygontest(polygon, (center_x, center_y)):
+        is_occupied = True
+        # break
+    else:
+        is_occupied = False
+
+    # 根據判斷結果繪製文字
+    if is_occupied:
+        cv2.putText(image, f"parking_space:True", (x_min, y_max + 25), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255),
+                    2)
+    else:
+        cv2.putText(image, f"parking_space:false", (x_min, y_max + 25), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255),
+                    2)
+
+plt.figure(figsize=(8, 6))
+# print(type(image))
+# print(image[0, 0, 0])
+plt.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+plt.axis('off')
+plt.show()
+
+# 儲存最後辨識結果的圖片
+saved_images_count = len(os.listdir(r"D:\polygon\bnd_photo"))
+save_image_filename = "bnd_photo{}.jpg".format(saved_images_count + 1)
+save_image_path = os.path.join(r"D:\polygon\bnd_photo", save_image_filename)
+cv2.imwrite(save_image_path, image)
+
+end = time.time()
+runtime = end - start
+runtime = "{:.3f}".format(runtime)
+# print("Elapsed time: {} seconds".format(elapsed_time_formatted))
+
+print("runtime: {:.3f} seconds".format(end - start))
+
+# 儲存辨識結果和判斷結果的字典
+result_data = {
+    "image_path": save_image_path,
+    "parking_spaces": []
+
+}
+
+# 建立每個停車格的結果字典
+for i, polygon in enumerate(polygons):
+    # 取得停車格的頂點座標
+    vertices = polygon
+    points = np.array(vertices, np.int32)
+
+    # 判斷停車格內是否有車
+    is_occupied = False
+    for car_box in car_boxes:
+        # 取得車輛的標註框座標
+        box = car_box['box']
+        x_min = box['x_min']
+        y_min = box['y_min']
+        x_max = box['x_max']
+        y_max = box['y_max']
+
+        # 計算標註框的中心點座標
+        center_x = int((x_min + x_max) / 2)
+        center_y = int((y_min + y_max) / 2)
+
+        # 判斷中心點是否在停車格內
+        if polygontest(polygon, (center_x, center_y)):
+            is_occupied = True
+            break
+
+    parking_id = "A" + str(i + 1).zfill(3)  # 格式化停車格 ID
+    parking_space = {
+        "camera": 1,
+        "parking_id": parking_id,
+        "occupied": is_occupied,
+        "run_time": runtime
+    }
+
+    # 將停車格的結果加入列表
+    result_data["parking_spaces"].append(parking_space)
+
+# 儲存結果字典為 JSON 檔案
+result_json_path = os.path.join(r"D:\polygon\result.json")
+with open(result_json_path, 'w') as f:
+    json.dump(result_data, f)
+
+# 儲存結果字典為 CSV 檔案
+result_csv_path = os.path.join(r"D:\polygon\result.csv")
+result_df = pd.DataFrame(result_data)
+result_df.to_csv(result_csv_path, index=False)
+
+if __name__ == '__main__':
+    app.run(port=6000)
